@@ -3,10 +3,68 @@ import torch
 from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.tensorboard import SummaryWriter
 import torch.nn as nn
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+
 
 from wideAndDeepModel import CTN
 from scheduler import NoamScheduler
 from dataset import ECG12LeadDataset
+
+
+def plot_attention_weights(input_data, attention_head = 0):
+    # Assume that 'input_data' is your input to the CTN model and 'model' is an instance of the CTN class
+
+    output, attention_weights = model(input_data)
+
+    # Get ECG data
+    ecg_data = input_data.detach().cpu().numpy()[0, 0]
+
+    # Prepare figure
+    fig, ax1 = plt.subplots()
+
+    # Plot ECG data
+    color = 'tab:red'
+    ax1.set_xlabel('time (s)')
+    ax1.set_ylabel('ECG', color=color)
+    ax1.plot(ecg_data, color=color)
+    ax1.tick_params(axis='y', labelcolor=color)
+
+    # Create second axes that shares the same x-axis
+    ax2 = ax1.twinx()
+
+    # We already handled the x-label with ax1
+    ax2.set_ylabel('Attention', color=color)
+
+    # Stack attention weights into a tensor
+    attention_tensor = torch.stack(attention_weights)
+
+    # Compute attention weights average
+    weights_avg = attention_tensor[attention_head].mean(dim=1).mean(dim=-1).detach().cpu().numpy()
+
+    # We apply a moving average to make the attention weights smoother
+    # window = 10
+    # weights_smooth = np.convolve(weights_avg, np.ones(window)/window, mode='valid')
+    from scipy import interpolate
+
+    # Create an interpolation function based on the original weights
+    f = interpolate.interp1d(np.arange(len(weights_avg)), weights_avg, kind='linear')
+
+    # Create new x values with the same length as ecg_data
+    xnew = np.linspace(0, len(weights_avg) - 1, num=len(ecg_data))
+
+    # Interpolate the weights_avg to these new x values
+    weights_avg_interp = f(xnew)
+    # Plot attention weights
+    color = 'tab:blue'
+    ax2.plot(weights_avg_interp, color=color)
+    ax2.tick_params(axis='y', labelcolor=color)
+    # ax2.set_yscale('log')
+
+    # Show plot
+    fig.tight_layout()
+    return fig
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print('Device Used:', device)
@@ -58,13 +116,13 @@ optimizer = torch.optim.Adam(model.parameters(), lr=starting_lr, betas=betas, ep
 scheduler = LambdaLR(optimizer, lr_lambda=NoamScheduler)#lambda step: NoamScheduler(model_size, warmup_steps, step + 1))
 
 writer = SummaryWriter()
-
+run_name = os.path.basename(writer.log_dir)
 for epoch in range(n_epochs):
     for batch_idx, batch in enumerate(train_loader):
         batch_features = batch[0].float().to(device)
         batch_labels = batch[1].float().to(device)
         optimizer.zero_grad()
-        out = model(batch_features)
+        out, attention_weights = model(batch_features)
         loss = nn.functional.binary_cross_entropy_with_logits(out, batch_labels)
         loss.backward()
         optimizer.step()
@@ -80,8 +138,14 @@ for epoch in range(n_epochs):
         for batch_idx, batch in enumerate(val_loader):
             batch_features = batch[0].float().to(device)
             batch_labels = batch[1].float().to(device)
-            out = model(batch_features)
+            out, attention_weights = model(batch_features)
             loss = nn.functional.binary_cross_entropy_with_logits(out, batch_labels)
             val_loss += loss.item()
     writer.add_scalar('Validation Loss', val_loss / len(val_loader), epoch)
+    for n in range(8):
+        fig = plot_attention_weights(batch_features, n)
+        plt.savefig('runs/%s/Epoch %s Attention Head %s.png' % (run_name,epoch, n))
+        writer.add_figure('Epoch %s Attention Head %s' % (epoch, n), fig, global_step=epoch * len(train_loader) + batch_idx)
+        plt.close(fig)
 x = 1
+

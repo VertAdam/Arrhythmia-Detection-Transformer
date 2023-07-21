@@ -34,40 +34,87 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 
-class Transformer(nn.Module):
+class TransformerEncoderLayer(nn.Module):
+    def __init__(self, embedding_size, nhead, feed_fwd_layer_size, dropout):
+        super(TransformerEncoderLayer, self).__init__()
+        self.self_attn = nn.MultiheadAttention(embedding_size, nhead)
+        self.linear1 = nn.Linear(embedding_size, feed_fwd_layer_size)
+        self.dropout = nn.Dropout(dropout)
+        self.linear2 = nn.Linear(feed_fwd_layer_size, embedding_size)
+        self.norm1 = nn.LayerNorm(embedding_size)
+        self.norm2 = nn.LayerNorm(embedding_size)
+        self.dropout1 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
+
+    def forward(self, src):
+        # Self-attention layer
+        src2, self.attn_weights = self.self_attn(src, src, src)
+        src = src + self.dropout1(src2)
+        src = self.norm1(src)
+
+        # Feedforward layer
+        src2 = self.linear2(self.dropout(F.relu(self.linear1(src))))
+        src = src + self.dropout2(src2)
+        src = self.norm2(src)
+
+        return src, self.attn_weights
+
+class TransformerEncoder(nn.Module):
+    def __init__(self, d_model, nhead, dim_feedforward, num_layers, dropout):
+        super(TransformerEncoder, self).__init__()
+
+        self.layers = nn.ModuleList([
+            TransformerEncoderLayer(d_model, nhead, dim_feedforward, dropout)
+            for _ in range(num_layers)
+        ])
+
+        self.norm = nn.LayerNorm(d_model)
+
+    def forward(self, src):
+        output = src
+        attention_weights = []
+        for mod in self.layers:
+            output, weights = mod(output)
+            attention_weights.append(weights)
+
+        return self.norm(output), attention_weights
+
+
+class TransformerFull(nn.Module):
     '''
     Transformer encoder processes convolved ECG samples
     Stacks a number of TransformerEncoderLayers
     '''
 
-    def __init__(self, d_model, h, d_ff, num_layers, dropout):
-        super(Transformer, self).__init__()
-        self.d_model = d_model
-        self.h = h
-        self.d_ff = d_ff
-        self.num_layers = num_layers
+    def __init__(self, embedding_size, nhead, feed_fwd_layer_size, num_layers, dropout):
+        super(TransformerFull, self).__init__()
+        self.embedding_size = embedding_size
+        self.nhead = nhead
+        self.feed_fwd_layer_size = feed_fwd_layer_size
         self.dropout = dropout
-        self.pe = PositionalEncoding(d_model, dropout=0.1)
+        self.num_layers = num_layers
+        self.pe = PositionalEncoding(embedding_size, dropout=dropout)
 
-        encode_layer = nn.TransformerEncoderLayer(
-            d_model=self.d_model,
-            nhead=self.h,
-            dim_feedforward=self.d_ff,
-            dropout=self.dropout)
-        self.transformer_encoder = nn.TransformerEncoder(encode_layer, self.num_layers)
+        # encode_layer = TransformerEncoderLayer(
+        #     embedding_size=self.embedding_size,
+        #     nhead=self.nhead,
+        #     feed_fwd_layer_size=self.feed_fwd_layer_size,
+        #     num_layers=self.num_layers,
+        #     dropout=self.dropout)
+        self.transformer_encoder = TransformerEncoder(embedding_size, nhead, feed_fwd_layer_size, num_layers, dropout)
 
     def forward(self, x):
         out = x.permute(0, 2, 1)
         out = self.pe(out)
         out = out.permute(1, 0, 2)
-        out = self.transformer_encoder(out)
+        out, attention_weights = self.transformer_encoder(out)
         out = out.mean(0)  # global pooling
-        return out
+        return out, attention_weights
 
 
 # 15 second model
 class CTN(nn.Module):
-    def __init__(self, embedding_size, nhead, feed_fwd_layer_size, n_layers, dropout, fc1_size, wide_feature_size, classes):
+    def __init__(self, embedding_size, nhead, feed_fwd_layer_size, num_layers, dropout, fc1_size, wide_feature_size, classes):
         super(CTN, self).__init__()
 
         self.encoder = nn.Sequential(  # downsampling factor = 20
@@ -90,7 +137,7 @@ class CTN(nn.Module):
             nn.BatchNorm1d(embedding_size),
             nn.ReLU(inplace=True)
         )
-        self.transformer = Transformer(embedding_size, nhead, feed_fwd_layer_size, n_layers, dropout=0.1)
+        self.transformer = TransformerFull(embedding_size, nhead, feed_fwd_layer_size, num_layers, dropout=dropout)
         self.fc1 = nn.Linear(embedding_size, fc1_size)
         self.fc2 = nn.Linear(fc1_size + wide_feature_size, len(classes))
         self.dropout = nn.Dropout(dropout)
@@ -104,14 +151,14 @@ class CTN(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
-        # self.apply(_weights_init)
+        self.apply(_weights_init)
 
     def forward(self, x, wide_feats = None):
         z = self.encoder(x)  # encoded sequence is batch_sz x nb_ch x seq_len
-        out = self.transformer(z)  # transformer output is batch_sz x d_model
+        out, attention_weights = self.transformer(z)  # transformer output is batch_sz x d_model
         out = self.dropout(F.relu(self.fc1(out)))
         if wide_feats is None:
             out = self.fc2(out)
         else:
             out = self.fc2(torch.cat([wide_feats, out], dim=1))
-        return out
+        return out, attention_weights
