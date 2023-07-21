@@ -67,7 +67,7 @@ class Transformer(nn.Module):
 
 # 15 second model
 class CTN(nn.Module):
-    def __init__(self, d_model, nhead, d_ff, num_layers, dropout_rate, deepfeat_sz, nb_feats, nb_demo, classes):
+    def __init__(self, embedding_size, nhead, feed_fwd_layer_size, n_layers, dropout, fc1_size, wide_feature_size, classes):
         super(CTN, self).__init__()
 
         self.encoder = nn.Sequential(  # downsampling factor = 20
@@ -77,23 +77,23 @@ class CTN(nn.Module):
             nn.Conv1d(128, 256, kernel_size=14, stride=3, padding=0, bias=False),
             nn.BatchNorm1d(256),
             nn.ReLU(inplace=True),
-            nn.Conv1d(256, d_model, kernel_size=10, stride=2, padding=0, bias=False),
-            nn.BatchNorm1d(d_model),
+            nn.Conv1d(256, embedding_size, kernel_size=10, stride=2, padding=0, bias=False),
+            nn.BatchNorm1d(embedding_size),
             nn.ReLU(inplace=True),
-            nn.Conv1d(d_model, d_model, kernel_size=10, stride=2, padding=0, bias=False),
-            nn.BatchNorm1d(d_model),
+            nn.Conv1d(embedding_size, embedding_size, kernel_size=10, stride=2, padding=0, bias=False),
+            nn.BatchNorm1d(embedding_size),
             nn.ReLU(inplace=True),
-            nn.Conv1d(d_model, d_model, kernel_size=10, stride=1, padding=0, bias=False),
-            nn.BatchNorm1d(d_model),
+            nn.Conv1d(embedding_size, embedding_size, kernel_size=10, stride=1, padding=0, bias=False),
+            nn.BatchNorm1d(embedding_size),
             nn.ReLU(inplace=True),
-            nn.Conv1d(d_model, d_model, kernel_size=10, stride=1, padding=0, bias=False),
-            nn.BatchNorm1d(d_model),
+            nn.Conv1d(embedding_size, embedding_size, kernel_size=10, stride=1, padding=0, bias=False),
+            nn.BatchNorm1d(embedding_size),
             nn.ReLU(inplace=True)
         )
-        self.transformer = Transformer(d_model, nhead, d_ff, num_layers, dropout=0.1)
-        self.fc1 = nn.Linear(d_model, deepfeat_sz)
-        self.fc2 = nn.Linear(deepfeat_sz + nb_feats + nb_demo, len(classes))
-        self.dropout = nn.Dropout(dropout_rate)
+        self.transformer = Transformer(embedding_size, nhead, feed_fwd_layer_size, n_layers, dropout=0.1)
+        self.fc1 = nn.Linear(embedding_size, fc1_size)
+        self.fc2 = nn.Linear(fc1_size + wide_feature_size, len(classes))
+        self.dropout = nn.Dropout(dropout)
 
         def _weights_init(m):
             if isinstance(m, nn.Linear):
@@ -106,9 +106,12 @@ class CTN(nn.Module):
 
         # self.apply(_weights_init)
 
-    def forward(self, x, wide_feats):
+    def forward(self, x, wide_feats = None):
         z = self.encoder(x)  # encoded sequence is batch_sz x nb_ch x seq_len
         out = self.transformer(z)  # transformer output is batch_sz x d_model
         out = self.dropout(F.relu(self.fc1(out)))
-        out = self.fc2(torch.cat([wide_feats, out], dim=1))
+        if wide_feats is None:
+            out = self.fc2(out)
+        else:
+            out = self.fc2(torch.cat([wide_feats, out], dim=1))
         return out

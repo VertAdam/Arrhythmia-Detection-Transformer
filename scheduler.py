@@ -6,7 +6,7 @@
 import torch.optim
 
 
-def NoamScheduler(model_size, step_num, warmup_steps=4000):
+def NoamScheduler(step_num, model_size=12, warmup_steps=4000):
     """
     Using the Adam optimizer with a learning rate schedule as defined in the attention is all you need paper
     Basic idea is that the learning rate increases linearly for the warmup steps and then decreases proportionally to
@@ -17,6 +17,7 @@ def NoamScheduler(model_size, step_num, warmup_steps=4000):
         step_num: Number of steps where learning rate is increasing linearly
         warmup_steps: Current step number
     """
+    step_num+=1
     multiplier = min(step_num**(-0.5), step_num * warmup_steps**(-1.5))
     return model_size**(-0.5)*multiplier
 
