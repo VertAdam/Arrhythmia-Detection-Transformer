@@ -114,9 +114,9 @@ class TransformerFull(nn.Module):
 
 # 15 second model
 class CTN(nn.Module):
-    def __init__(self, embedding_size, nhead, feed_fwd_layer_size, num_layers, dropout, fc1_size, wide_feature_size, classes, num_leads = 12):
+    def __init__(self, embedding_size, nhead, feed_fwd_layer_size, num_layers, dropout, fc1_size, wide_feature_size, classes, num_leads = 1):
         super(CTN, self).__init__()
-
+        #TODO: CHANGE THE CONV PARAMETERS SO THAT IT FITS A 187 SIZE INPUT
         self.encoder = nn.Sequential(  # downsampling factor = 20
             nn.Conv1d(num_leads, 128, kernel_size=14, stride=3, padding=2, bias=False),
             nn.BatchNorm1d(128),
