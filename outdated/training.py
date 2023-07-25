@@ -6,7 +6,7 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-
+from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 
 from wideAndDeepModel import CTN
 from scheduler import NoamScheduler
@@ -14,11 +14,8 @@ from dataset import ECG12LeadDataset
 
 
 def plot_attention_weights(input_data, attention_head = 0):
-    # Assume that 'input_data' is your input to the CTN model and 'model' is an instance of the CTN class
-
     output, attention_weights = model(input_data)
 
-    # Get ECG data
     ecg_data = input_data.detach().cpu().numpy()[0, 0]
 
     # Prepare figure
@@ -30,31 +27,22 @@ def plot_attention_weights(input_data, attention_head = 0):
     ax1.set_ylabel('ECG', color=color)
     ax1.plot(ecg_data, color=color)
     ax1.tick_params(axis='y', labelcolor=color)
-
-    # Create second axes that shares the same x-axis
     ax2 = ax1.twinx()
 
-    # We already handled the x-label with ax1
+
     ax2.set_ylabel('Attention', color=color)
 
-    # Stack attention weights into a tensor
-    attention_tensor = torch.stack(attention_weights)
+    attention_to_plot = attention_weights[-1].to('cpu').detach().unsqueeze(0).numpy()
+    attention_to_plot = attention_to_plot.mean(axis=1)[0][0]
 
-    # Compute attention weights average
-    weights_avg = attention_tensor[attention_head].mean(dim=1).mean(dim=-1).detach().cpu().numpy()
-
-    # We apply a moving average to make the attention weights smoother
-    # window = 10
-    # weights_smooth = np.convolve(weights_avg, np.ones(window)/window, mode='valid')
     from scipy import interpolate
 
-    # Create an interpolation function based on the original weights
-    f = interpolate.interp1d(np.arange(len(weights_avg)), weights_avg, kind='linear')
 
-    # Create new x values with the same length as ecg_data
-    xnew = np.linspace(0, len(weights_avg) - 1, num=len(ecg_data))
+    f = interpolate.interp1d(np.arange(len(attention_to_plot)), attention_to_plot, kind='linear')
 
-    # Interpolate the weights_avg to these new x values
+
+    xnew = np.linspace(0, len(attention_to_plot) - 1, num=len(ecg_data))
+
     weights_avg_interp = f(xnew)
     # Plot attention weights
     color = 'tab:blue'
@@ -118,22 +106,40 @@ scheduler = LambdaLR(optimizer, lr_lambda=NoamScheduler)#lambda step: NoamSchedu
 writer = SummaryWriter()
 run_name = os.path.basename(writer.log_dir)
 for epoch in range(n_epochs):
+    y_true_train = []
+    y_pred_train = []
     for batch_idx, batch in enumerate(train_loader):
         batch_features = batch[0].float().to(device)
         batch_labels = batch[1].float().to(device)
         optimizer.zero_grad()
         out, attention_weights = model(batch_features)
+
         loss = nn.functional.binary_cross_entropy_with_logits(out, batch_labels)
         loss.backward()
         optimizer.step()
         scheduler.step()
         current_lr = scheduler.get_last_lr()[0]
+        _, predicted = torch.max(out.data, 1)
+        y_true_train.extend(torch.max(batch_labels, 1)[1].cpu().numpy())
+        y_pred_train.extend(predicted.cpu().numpy())
         writer.add_scalar('Learning Rate', current_lr, epoch * len(train_loader) + batch_idx)
         writer.add_scalar('Training Loss', loss.item(), epoch * len(train_loader) + batch_idx)
+
+    precision_train = precision_score(y_true_train, y_pred_train, average='macro')
+    recall_train = recall_score(y_true_train, y_pred_train, average='macro')
+    f1_train = f1_score(y_true_train, y_pred_train, average='macro')
+    acc_val = accuracy_score(y_true_train, y_pred_train)
+
+    writer.add_scalar('Training Accuracy', acc_val, epoch)
+    writer.add_scalar('Training Precision', precision_train, epoch)
+    writer.add_scalar('Training Recall', recall_train, epoch)
+    writer.add_scalar('Training F1', f1_train, epoch)
 
     # Validation loop
     model.eval()
     val_loss = 0
+    y_true_val = []
+    y_pred_val = []
     with torch.no_grad():
         for batch_idx, batch in enumerate(val_loader):
             batch_features = batch[0].float().to(device)
@@ -141,11 +147,26 @@ for epoch in range(n_epochs):
             out, attention_weights = model(batch_features)
             loss = nn.functional.binary_cross_entropy_with_logits(out, batch_labels)
             val_loss += loss.item()
+            _, predicted = torch.max(out.data, 1)
+            y_true_val.extend(torch.max(batch_labels, 1)[1].cpu().numpy())
+            y_pred_val.extend(predicted.cpu().numpy())
+
+    precision_val = precision_score(y_true_val, y_pred_val, average='macro')
+    recall_val = recall_score(y_true_val, y_pred_val, average='macro')
+    f1_val = f1_score(y_true_val, y_pred_val, average='macro')
+    acc_val = accuracy_score(y_true_val, y_pred_val)
+
+    writer.add_scalar('Validation Accuracy', acc_val, epoch)
+    writer.add_scalar('Validation Precision', precision_val, epoch)
+    writer.add_scalar('Validation Recall', recall_val, epoch)
+    writer.add_scalar('Validation F1', f1_val, epoch)
     writer.add_scalar('Validation Loss', val_loss / len(val_loader), epoch)
-    for n in range(8):
-        fig = plot_attention_weights(batch_features, n)
-        plt.savefig('runs/%s/Epoch %s Attention Head %s.png' % (run_name,epoch, n))
-        writer.add_figure('Epoch %s Attention Head %s' % (epoch, n), fig, global_step=epoch * len(train_loader) + batch_idx)
-        plt.close(fig)
+
+    writer.add_scalar('Validation Loss', val_loss / len(val_loader), epoch)
+    # for n in range(8):
+    #     fig = plot_attention_weights(batch_features, n)
+    #     plt.savefig('runs/%s/Epoch %s Attention Head %s.png' % (run_name,epoch, n))
+    #     writer.add_figure('Epoch %s Attention Head %s' % (epoch, n), fig, global_step=epoch * len(train_loader) + batch_idx)
+    #     plt.close(fig)
 x = 1
 
