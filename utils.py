@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader
@@ -8,10 +9,10 @@ def load_data(train, test, batch_size, val_split=0.2):
     train = pd.read_csv(train, header=None).values
     test = pd.read_csv(test, header=None).values
 
-    train = torch.utils.data.TensorDataset(torch.from_numpy(train[:,:-1]).float(),
+    train = torch.utils.data.TensorDataset(torch.from_numpy(np.pad(train[:,:-1], ((0, 0), (0, 13)), 'constant')).float(),
                                            torch.from_numpy(train[:,-1]).long(),)
 
-    test = torch.utils.data.TensorDataset(torch.from_numpy(test[:,:-1]).float(),
+    test = torch.utils.data.TensorDataset(torch.from_numpy(np.pad(test[:,:-1], ((0, 0), (0, 13)), 'constant')).float(),
                                           torch.from_numpy(test[:,-1]).long())
 
     train_size = len(train)
@@ -74,4 +75,3 @@ def evaluate(dataloader, model, loss_fn, device):
     test_loss /= num_batches
     test_accuracy = correct / size
     return test_accuracy, test_loss
-
