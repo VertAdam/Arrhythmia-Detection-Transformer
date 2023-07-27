@@ -28,7 +28,7 @@ def load_data(train, test, batch_size, val_split=0.2):
     return train_loader, val_loader, test_loader
 
 
-def train_loop(dataloader, model, loss_fn, optimizer, device):
+def train_loop(dataloader, model, loss_fn, optimizer, device, scheduler= None, verbose = True):
     
     size = len(dataloader.dataset)
     model.train()
@@ -42,6 +42,7 @@ def train_loop(dataloader, model, loss_fn, optimizer, device):
         loss = loss_fn(pred, y)
         loss.backward()
         optimizer.step()
+        scheduler.step()
         optimizer.zero_grad()
 
         train_loss += loss.item()
@@ -49,7 +50,9 @@ def train_loop(dataloader, model, loss_fn, optimizer, device):
 
         if batch % 10 == 0:
             loss, current = loss.item(), (batch + 1) * len(X)
-            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+            if verbose:
+                print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+                print(f"Learning rate: {scheduler.get_last_lr()[0]}")
 
     train_loss /= len(dataloader)
     train_accuracy = correct / size
