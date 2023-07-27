@@ -1,0 +1,11 @@
+ResnetTransformer (lr=1e-4):
+Best trial: score 0.9868075385494004, params {'in_channels': 480, 'kernel_size': 7, 'nhead': 8, 'dim_feedforward': 4096, 't_dropout': 0.1, 'pe_dropout': 0.0, 'num_layers': 3}
+
+Transformer_no_PE (lr=1e-4):
+Best trial: score 0.9810965162764135, params {'nhead': 10, 'dim_feedforward': 2048, 't_dropout': 0.1, 'num_layers': 9}
+
+Transformer (lr= 1e-4):
+Best trial: score 0.979097658480868, params {'nhead': 40, 'dim_feedforward': 2048, 't_dropout': 0.0, 'pe_dropout': 0.0, 'num_layers': 6}
+
+ResNet (lr=1e-4):
+Best trial: score 0.9860079954311822, params {'in_channels': 512, 'kernel_size': 7}
