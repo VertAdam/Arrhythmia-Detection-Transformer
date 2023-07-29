@@ -9,6 +9,7 @@ from torch.optim.lr_scheduler import LambdaLR
 from focal_loss import FocalLoss, reweight
 from torch.utils.tensorboard import SummaryWriter
 from sklearn.metrics import classification_report
+import time
 
 
 def get_predictions_and_labels(loader, model, device):
@@ -25,7 +26,8 @@ def get_predictions_and_labels(loader, model, device):
 			all_labels.extend(labels.cpu().numpy())
 
 	return all_preds, all_labels
-import time
+
+
 def main(learning_rate=0.0001, batch_size=512, epochs=50, model_type='ResNetTransformer', plot = True, loss = 'FocalLoss', tensor_board = False):
 	if tensor_board:
 		writer = SummaryWriter('runs/' + model_type + '_' + '_' + time.strftime("%Y%m%d-%H%M%S"))
@@ -68,24 +70,24 @@ def main(learning_rate=0.0001, batch_size=512, epochs=50, model_type='ResNetTran
 		per_cls_weights = reweight(class_counts, beta= 0.9999).to(device)
 		loss_fn = FocalLoss(weight=per_cls_weights, gamma = 1)
 
-	train_accuracy_curve = []
-	val_accuracy_curve = []
+	train_f1_curve = []
+	val_f1_curve = []
 
 	train_loss_curve = []
 	val_loss_curve = []
 	patience = 30
-	best_val_accuracy = 0.0
+	best_val_f1 = 0.0
 	epochs_no_improve = 0
 	for t in range(epochs):
 
 		print(f"Epoch {t+1}\n-------------------------------")
-		train_accuracy, train_loss = utils.train_loop(train_loader, model, loss_fn, optimizer, device, scheduler)
-		val_accuracy, val_loss = utils.evaluate(val_loader, model, loss_fn, device)
-		print(f"Train Accuracy: {train_accuracy:>8f}  Train Loss: {train_loss:>8f}")
-		print(f"Val Accuracy: {val_accuracy:>8f}  Val Loss: {val_loss:>8f}")
+		train_f1, train_loss = utils.train_loop(train_loader, model, loss_fn, optimizer, device, scheduler)
+		val_f1, val_loss = utils.evaluate(val_loader, model, loss_fn, device)
+		print(f"Train F1 Score: {train_f1:>8f}  Train Loss: {train_loss:>8f}")
+		print(f"Val F1 Score: {val_f1:>8f}  Val Loss: {val_loss:>8f}")
 
-		train_accuracy_curve.append(train_accuracy)
-		val_accuracy_curve.append(val_accuracy)
+		train_f1_curve.append(train_f1)
+		val_f1_curve.append(val_f1)
 		train_loss_curve.append(train_loss)
 		val_loss_curve.append(val_loss)
 		preds, labels = get_predictions_and_labels(val_loader, model, device)
@@ -96,7 +98,7 @@ def main(learning_rate=0.0001, batch_size=512, epochs=50, model_type='ResNetTran
 			precision_scores = {}
 			recall_scores = {}
 			writer.add_scalars('Loss', {'train': train_loss, 'val': val_loss}, t)
-			writer.add_scalars('Accuracy', {'train': train_accuracy, 'val': val_accuracy}, t)
+			writer.add_scalars('F1 Score', {'train': train_f1, 'val': val_f1}, t)
 			for class_label, metrics in report.items():  # check if the label is a number (class index)
 				if class_label == 'accuracy':
 					continue
@@ -108,8 +110,8 @@ def main(learning_rate=0.0001, batch_size=512, epochs=50, model_type='ResNetTran
 			writer.add_scalars('Recall', recall_scores, t)
 			print(classification_report(labels, preds, digits = 4))
 
-		if val_accuracy > best_val_accuracy:
-			best_val_accuracy = val_accuracy
+		if val_f1 > best_val_f1:
+			best_val_f1 = val_f1
 			epochs_no_improve = 0
 			torch.save(model.state_dict(), 'models/%s_best.pt' % model_type)
 		else:
@@ -123,16 +125,16 @@ def main(learning_rate=0.0001, batch_size=512, epochs=50, model_type='ResNetTran
 
 	writer.close()
 	model.load_state_dict(torch.load('models/%s_best.pt' % model_type))
-	test_accuracy, _ = utils.evaluate(test_loader, model, loss_fn, device)
-	print(f"Test Accuracy: {test_accuracy:>8f}")
+	test_f1, _ = utils.evaluate(test_loader, model, loss_fn, device)
+	print(f"Test F1 Score: {test_f1:>8f}")
 	if plot:
-		plt.plot(train_accuracy_curve, label='train')
-		plt.plot(val_accuracy_curve, label='val')
+		plt.plot(train_f1_curve, label='train')
+		plt.plot(val_f1_curve, label='val')
 		plt.xlabel('Epochs')
-		plt.ylabel('Accuracy')
-		plt.title(f'{model.__class__.__name__} \n train={train_accuracy:.4f} val={val_accuracy:.4f} test={test_accuracy:.4f}')
+		plt.ylabel('F1 Score')
+		plt.title(f'{model.__class__.__name__} \n train={train_f1:.4f} val={val_f1:.4f} test={test_f1:.4f}')
 		plt.legend()
-		plt.savefig(f'plots/{model.__class__.__name__}_accuracy_curve.png')
+		plt.savefig(f'plots/{model.__class__.__name__}_f1_curve.png')
 		plt.close()
 
 		plt.plot(train_loss_curve, label='train')

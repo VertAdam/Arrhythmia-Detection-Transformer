@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader
+from sklearn.metrics import f1_score
 
 
 def load_data(train, test, batch_size, val_split=0.2):
@@ -32,7 +33,9 @@ def train_loop(dataloader, model, loss_fn, optimizer, device, scheduler= None, v
     
     size = len(dataloader.dataset)
     model.train()
-    train_loss, correct = 0, 0
+    train_loss = 0
+    y_true = []
+    y_pred = []
 
     for batch, (X, y) in enumerate(dataloader):
 
@@ -46,7 +49,8 @@ def train_loop(dataloader, model, loss_fn, optimizer, device, scheduler= None, v
         optimizer.zero_grad()
 
         train_loss += loss.item()
-        correct += (pred.argmax(1) == y).type(torch.float).sum().item()
+        y_true.extend(y.cpu().numpy())
+        y_pred.extend(pred.argmax(1).cpu().numpy())
 
         if batch % 10 == 0:
             loss, current = loss.item(), (batch + 1) * len(X)
@@ -55,8 +59,8 @@ def train_loop(dataloader, model, loss_fn, optimizer, device, scheduler= None, v
                 print(f"Learning rate: {scheduler.get_last_lr()[0]}")
 
     train_loss /= len(dataloader)
-    train_accuracy = correct / size
-    return train_accuracy, train_loss
+    train_f1_score = f1_score(y_true, y_pred, average='macro')
+    return train_f1_score, train_loss
 
 
 def evaluate(dataloader, model, loss_fn, device):
@@ -64,7 +68,9 @@ def evaluate(dataloader, model, loss_fn, device):
     model.eval()
     size = len(dataloader.dataset)
     num_batches = len(dataloader)
-    test_loss, correct = 0, 0
+    test_loss = 0
+    y_true = []
+    y_pred = []
 
     with torch.no_grad():
         for X, y in dataloader:
@@ -73,8 +79,9 @@ def evaluate(dataloader, model, loss_fn, device):
 
             pred = model(X)
             test_loss += loss_fn(pred, y).item()
-            correct += (pred.argmax(1) == y).type(torch.float).sum().item()
+            y_true.extend(y.cpu().numpy())
+            y_pred.extend(pred.argmax(1).cpu().numpy())
 
     test_loss /= num_batches
-    test_accuracy = correct / size
-    return test_accuracy, test_loss
+    test_f1_score = f1_score(y_true, y_pred, average='macro')
+    return test_f1_score, test_loss
