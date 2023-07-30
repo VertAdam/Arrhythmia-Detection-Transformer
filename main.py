@@ -125,29 +125,30 @@ def main(learning_rate=0.0001, batch_size=512, epochs=50, model_type='ResNetTran
 
 	writer.close()
 	model.load_state_dict(torch.load('models/%s_best.pt' % model_type))
-	test_f1, _ = utils.evaluate(test_loader, model, loss_fn, device)
-	print(f"Test F1 Score: {test_f1:>8f}")
+
 	if plot:
-		plt.plot(train_f1_curve, label='train')
-		plt.plot(val_f1_curve, label='val')
+		plt.plot(train_f1_curve[:-patience], label='train')
+		plt.plot(val_f1_curve[:-patience], label='val')
 		plt.xlabel('Epochs')
 		plt.ylabel('F1 Score')
-		plt.title(f'{model.__class__.__name__} \n train={train_f1:.4f} val={val_f1:.4f} test={test_f1:.4f}')
+		plt.title(f'{model.__class__.__name__}')
 		plt.legend()
 		plt.savefig(f'plots/{model.__class__.__name__}_f1_curve.png')
 		plt.close()
 
-		plt.plot(train_loss_curve, label='train')
-		plt.plot(val_loss_curve, label='val')
+		plt.plot(train_loss_curve[:-patience], label='train')
+		plt.plot(val_loss_curve[:-patience], label='val')
 		plt.xlabel('Epochs')
 		plt.ylabel('Loss')
-		plt.title(f'{model.__class__.__name__} \n train={train_loss:.4f} val={val_loss:.4f}')
+		plt.title(f'{model.__class__.__name__}')
 		plt.legend()
 		plt.savefig(f'plots/{model.__class__.__name__}_loss_curve.png')
 		plt.close()
 		torch.save(model.state_dict(), 'models/%s.pt' % model_type)
 
+		preds, labels = get_predictions_and_labels(val_loader, model, device)
 		report = classification_report(labels, preds, digits = 4)
+		print(f'Best {model.__class__.__name__}: Validation')
 		print(report)
 
 		x = 1
