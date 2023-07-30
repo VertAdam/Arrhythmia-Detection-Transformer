@@ -30,7 +30,7 @@ Other:
   - Each beat annotated for a total of 110,000 total beats
 
 
-![classes](./plots/classes.png)
-![architecture](./plots/architecture.png)
-![recall](./plots/recall.png)
-![precision](./plots/precision.png)
+![classes](https://github.com/VertAdam/Arrhythmia-Detection-Transformer/blob/main/plots/report_figs/classes.png)
+![architecture](https://github.com/VertAdam/Arrhythmia-Detection-Transformer/blob/main/plots/report_figs/architecture.png)
+![recall](https://github.com/VertAdam/Arrhythmia-Detection-Transformer/blob/main/plots/report_figs/recall.png)
+![precision](https://github.com/VertAdam/Arrhythmia-Detection-Transformer/blob/main/plots/report_figs/precision.png)
