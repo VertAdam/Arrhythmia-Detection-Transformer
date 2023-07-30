@@ -28,3 +28,9 @@ Other:
   - 360 hz
   - 2 Lead
   - Each beat annotated for a total of 110,000 total beats
+
+
+![classes](./plots/classes.png)
+![architecture](./plots/architecture.png)
+![recall](./plots/recall.png)
+![precision](./plots/precision.png)
