@@ -4,6 +4,7 @@ import torch
 from torch.utils.data import DataLoader
 from sklearn.metrics import f1_score
 
+# Reference: https://pytorch.org/tutorials/beginner/basics/optimization_tutorial.html
 
 def load_data(train, test, batch_size, val_split=0.2):
 

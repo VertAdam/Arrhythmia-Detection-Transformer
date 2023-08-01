@@ -3,6 +3,7 @@ import torch.nn.functional as F
 import torch
 import math
 
+# Reference: https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 
 class Transformer_no_PE(nn.Module):
 
